@@ -1,15 +1,20 @@
 #Nao (NVDA Advanced OCR) is an addon that improves the standard OCR capabilities that NVDA provides on modern Windows versions.
 #This file is covered by the GNU General Public License.
 #See the file COPYING for more details.
-#Last update 2024-12-02
-#Copyright (C) 2024 Alessandro Cyrille Bougot
+#Last update 2025-07-09
+#Copyright (C) 2024-2025 Alessandro Albano, Davide De Carne, Simone Dal Maso, Cyrille Bougot
 
 import os
 import tempfile
 import api
 from logHandler import log
+from comtypes import COMError
 
 CONTROL_ID_ATTACHMENTS = 4306
+
+# MAPI property: PR_ATTACHMENT_HIDDEN
+# https://learn.microsoft.com/en-us/office/vba/api/outlook.propertyaccessor.getproperty
+PR_ATTACHMENT_HIDDEN = "http://schemas.microsoft.com/mapi/proptag/0x7FFE000B"
 
 class OutlookHelper:
 	def is_outlook(obj=None):
@@ -40,6 +45,13 @@ class OutlookHelper:
 				return idx
 		raise LookupError('Unable to find index of current item')
 
+	@staticmethod
+	def isInlineAttachment(attachment):
+		try:
+			return attachment.PropertyAccessor.GetProperty(PR_ATTACHMENT_HIDDEN)
+		except COMError:
+			return False
+
 	def currentFileWithPath(self):
 		obj = api.getFocusObject()
 		if not self.focusInAttachmentsList():
@@ -51,10 +63,14 @@ class OutlookHelper:
 		if inspector is not None:
 			tempDir = tempfile.mkdtemp()
 			mailItem = inspector.CurrentItem
-			if mailItem.Attachments.Count > 0:
-				attachment = mailItem.Attachments.Item(index + 1)
-				tempPath = os.path.join(tempDir, attachment.FileName)
-				attachment.SaveAsFile(tempPath)
-				log.debug(f"{tempPath=}")
-				return tempPath, tempDir
+			visibleAttachments = []
+			for i in range(1, mailItem.Attachments.Count + 1):
+				att = mailItem.Attachments.Item(i)
+				if not self.isInlineAttachment(att):
+					visibleAttachments.append(att)
+			attachment = visibleAttachments[index]
+			tempPath = os.path.join(tempDir, attachment.FileName)
+			attachment.SaveAsFile(tempPath)
+			log.debug(f"{tempPath=}")
+			return tempPath, tempDir
 		return None, None
