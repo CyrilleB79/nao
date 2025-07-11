@@ -12,9 +12,10 @@ from comtypes import COMError
 
 CONTROL_ID_ATTACHMENTS = 4306
 
-# MAPI property: PR_ATTACHMENT_HIDDEN
-# https://learn.microsoft.com/en-us/office/vba/api/outlook.propertyaccessor.getproperty
+# MAPI properties
 PR_ATTACHMENT_HIDDEN = "http://schemas.microsoft.com/mapi/proptag/0x7FFE000B"
+PR_ATTACH_CONTENT_ID = "http://schemas.microsoft.com/mapi/proptag/0x3712001F"
+PR_ATTACH_CONTENT_LOCATION = "http://schemas.microsoft.com/mapi/proptag/0x3713001F"
 
 class OutlookHelper:
 	def is_outlook(obj=None):
@@ -47,10 +48,36 @@ class OutlookHelper:
 
 	@staticmethod
 	def isInlineAttachment(attachment):
+		import globalVars as gv
+		if not hasattr(gv, 'dbg'):
+			gv.dbg = attachment
 		try:
 			return attachment.PropertyAccessor.GetProperty(PR_ATTACHMENT_HIDDEN)
 		except COMError:
 			return False
+
+	@staticmethod
+	def isInlineAttachment(attachment):
+		try:
+			propAccessor = attachment.PropertyAccessor
+		except COMError:
+			return False
+		try:
+			if propAccessor.GetProperty(PR_ATTACHMENT_HIDDEN):
+				return True
+		except COMError:
+			pass
+		try:
+			if propAccessor.GetProperty(PR_ATTACH_CONTENT_ID):
+				return True
+		except COMError:
+			pass
+		try:
+			if propAccessor.GetProperty(PR_ATTACH_CONTENT_LOCATION):
+				return True
+		except COMError:
+			pass
+		return False
 
 	def currentFileWithPath(self):
 		obj = api.getFocusObject()
@@ -66,6 +93,7 @@ class OutlookHelper:
 			visibleAttachments = []
 			for i in range(1, mailItem.Attachments.Count + 1):
 				att = mailItem.Attachments.Item(i)
+				log.info(f"""{att.FileName=}\n{self.isInlineAttachment(att)=}""")
 				if not self.isInlineAttachment(att):
 					visibleAttachments.append(att)
 			attachment = visibleAttachments[index]
